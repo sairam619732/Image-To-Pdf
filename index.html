@@ -1,71 +1,137 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Image to PDF (No Ads)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>Image to PDF (No Ads)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      text-align: center;
-      background: #f5f5f5;
-    }
-    h2 {
-      margin-bottom: 20px;
-    }
-    input, button {
-      width: 100%;
-      padding: 12px;
-      margin: 10px 0;
-      font-size: 16px;
-    }
-    button {
-      background: black;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-  </style>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  padding: 16px;
+  background: #f5f5f5;
+}
+h2 { text-align: center; }
+input, button {
+  width: 100%;
+  padding: 12px;
+  margin: 8px 0;
+  font-size: 16px;
+}
+button {
+  background: black;
+  color: white;
+  border: none;
+}
+.list {
+  margin-top: 20px;
+}
+.item {
+  background: white;
+  padding: 10px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+</style>
 </head>
 
 <body>
-  <h2>Image → PDF (No Ads)</h2>
+<h2>Image → PDF (No Ads)</h2>
 
-  <input type="file" accept="image/*" multiple id="imgInput">
+<input type="file" accept="image/*" multiple id="imgInput">
+<button onclick="createPDF()">Create PDF</button>
 
-  <button onclick="createPDF()">Create PDF</button>
+<div class="list">
+  <h3>Saved PDFs</h3>
+  <div id="pdfList"></div>
+</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <script>
-    async function createPDF() {
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF();
-      const files = document.getElementById("imgInput").files;
+<script>
+let db;
 
-      if (!files.length) {
-        alert("Select images first");
-        return;
-      }
+const request = indexedDB.open("pdfDB", 1);
+request.onupgradeneeded = e => {
+  db = e.target.result;
+  db.createObjectStore("pdfs", { keyPath: "id", autoIncrement: true });
+};
+request.onsuccess = e => {
+  db = e.target.result;
+  loadPDFs();
+};
 
-      for (let i = 0; i < files.length; i++) {
-        const imgData = await toBase64(files[i]);
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 10, 10, 190, 270);
-      }
+async function createPDF() {
+  const files = document.getElementById("imgInput").files;
+  if (!files.length) return alert("Select images first");
 
-      pdf.save("my_images.pdf");
-    }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
 
-    function toBase64(file) {
-      return new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    }
-  </script>
+  for (let i = 0; i < files.length; i++) {
+    const img = await toBase64(files[i]);
+    if (i > 0) pdf.addPage();
+    pdf.addImage(img, "JPEG", 10, 10, 190, 270);
+  }
+
+  const blob = pdf.output("blob");
+  savePDF(blob);
+  pdf.save("my_images.pdf");
+}
+
+function savePDF(blob) {
+  const tx = db.transaction("pdfs", "readwrite");
+  tx.objectStore("pdfs").add({
+    date: new Date().toLocaleString(),
+    blob: blob
+  });
+  tx.oncomplete = loadPDFs;
+}
+
+function loadPDFs() {
+  const list = document.getElementById("pdfList");
+  list.innerHTML = "";
+
+  const tx = db.transaction("pdfs", "readonly");
+  const store = tx.objectStore("pdfs");
+
+  store.openCursor().onsuccess = e => {
+    const cursor = e.target.result;
+    if (!cursor) return;
+
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `
+      <span>${cursor.value.date}</span>
+      <button onclick="downloadPDF(${cursor.key})">Download</button>
+    `;
+    list.appendChild(div);
+    cursor.continue();
+  };
+}
+
+function downloadPDF(id) {
+  const tx = db.transaction("pdfs", "readonly");
+  const store = tx.objectStore("pdfs");
+  store.get(id).onsuccess = e => {
+    const url = URL.createObjectURL(e.target.result.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "saved.pdf";
+    a.click();
+  };
+}
+
+function toBase64(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+</script>
 </body>
 </html>
+
