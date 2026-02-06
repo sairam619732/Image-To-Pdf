@@ -73,7 +73,25 @@ async function createPDF() {
   for (let i = 0; i < files.length; i++) {
     const img = await toBase64(files[i]);
     if (i > 0) pdf.addPage();
-    pdf.addImage(img, "JPEG", 10, 10, 190, 270);
+const imgData = await toBase64(files[i]);
+if (i > 0) pdf.addPage();
+
+const imgProps = pdf.getImageProperties(imgData);
+const pdfWidth = pdf.internal.pageSize.getWidth();
+const pdfHeight = pdf.internal.pageSize.getHeight();
+
+const imgWidth = imgProps.width;
+const imgHeight = imgProps.height;
+
+const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+const width = imgWidth * ratio;
+const height = imgHeight * ratio;
+
+const x = (pdfWidth - width) / 2;
+const y = (pdfHeight - height) / 2;
+
+pdf.addImage(imgData, "JPEG", x, y, width, height);
+
   }
 
   const blob = pdf.output("blob");
