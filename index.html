@@ -2,50 +2,128 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Image to PDF (No Ads)</title>
+<title>Image to PDF</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  padding: 16px;
-  background: #f5f5f5;
+:root {
+  --bg: #0f172a;
+  --card: #111827;
+  --accent: #22c55e;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
 }
-h2 { text-align: center; }
-input, button {
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 480px;
+  margin: auto;
+  padding: 16px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.header h1 {
+  font-size: 22px;
+  margin: 0;
+}
+
+.header p {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+input[type="file"] {
   width: 100%;
   padding: 12px;
-  margin: 8px 0;
-  font-size: 16px;
+  border-radius: 10px;
+  border: 1px dashed #374151;
+  background: #020617;
+  color: var(--text);
 }
+
 button {
-  background: black;
-  color: white;
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+  border-radius: 12px;
   border: none;
+  background: var(--accent);
+  color: #052e16;
+  font-size: 16px;
+  font-weight: 600;
 }
-.list {
-  margin-top: 20px;
+
+button:active {
+  transform: scale(0.98);
 }
-.item {
-  background: white;
-  padding: 10px;
+
+.section-title {
+  font-size: 14px;
+  color: var(--muted);
   margin-bottom: 8px;
+}
+
+.pdf-item {
+  background: #020617;
+  padding: 12px;
+  border-radius: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 8px;
+}
+
+.pdf-item span {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.pdf-item button {
+  width: auto;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: #1f2933;
+  color: var(--text);
 }
 </style>
 </head>
 
 <body>
-<h2>Image → PDF (No Ads)</h2>
+<div class="app">
 
-<input type="file" accept="image/*" multiple id="imgInput">
-<button onclick="createPDF()">Create PDF</button>
+  <div class="header">
+    <h1>Image → PDF</h1>
+    <p>No ads • Works offline • Private</p>
+  </div>
 
-<div class="list">
-  <h3>Saved PDFs</h3>
-  <div id="pdfList"></div>
+  <div class="card">
+    <div class="section-title">Select Images</div>
+    <input type="file" id="imgInput" accept="image/*" multiple>
+    <button onclick="createPDF()">Create PDF</button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Saved PDFs</div>
+    <div id="pdfList"></div>
+  </div>
+
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -53,12 +131,12 @@ button {
 <script>
 let db;
 
-const request = indexedDB.open("pdfDB", 1);
-request.onupgradeneeded = e => {
+const req = indexedDB.open("ImageToPDF_DB", 1);
+req.onupgradeneeded = e => {
   db = e.target.result;
   db.createObjectStore("pdfs", { keyPath: "id", autoIncrement: true });
 };
-request.onsuccess = e => {
+req.onsuccess = e => {
   db = e.target.result;
   loadPDFs();
 };
@@ -71,39 +149,37 @@ async function createPDF() {
   const pdf = new jsPDF();
 
   for (let i = 0; i < files.length; i++) {
-    const img = await toBase64(files[i]);
+    const imgData = await toBase64(files[i]);
     if (i > 0) pdf.addPage();
-const imgData = await toBase64(files[i]);
-if (i > 0) pdf.addPage();
 
-const imgProps = pdf.getImageProperties(imgData);
-const pdfWidth = pdf.internal.pageSize.getWidth();
-const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgProps = pdf.getImageProperties(imgData);
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
 
-const imgWidth = imgProps.width;
-const imgHeight = imgProps.height;
+    const ratio = Math.min(pw / imgProps.width, ph / imgProps.height);
+    const w = imgProps.width * ratio;
+    const h = imgProps.height * ratio;
 
-const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-const width = imgWidth * ratio;
-const height = imgHeight * ratio;
-
-const x = (pdfWidth - width) / 2;
-const y = (pdfHeight - height) / 2;
-
-pdf.addImage(imgData, "JPEG", x, y, width, height);
-
+    pdf.addImage(
+      imgData,
+      "JPEG",
+      (pw - w) / 2,
+      (ph - h) / 2,
+      w,
+      h
+    );
   }
 
   const blob = pdf.output("blob");
   savePDF(blob);
-  pdf.save("my_images.pdf");
+  pdf.save("images.pdf");
 }
 
 function savePDF(blob) {
   const tx = db.transaction("pdfs", "readwrite");
   tx.objectStore("pdfs").add({
     date: new Date().toLocaleString(),
-    blob: blob
+    blob
   });
   tx.oncomplete = loadPDFs;
 }
@@ -113,27 +189,24 @@ function loadPDFs() {
   list.innerHTML = "";
 
   const tx = db.transaction("pdfs", "readonly");
-  const store = tx.objectStore("pdfs");
-
-  store.openCursor().onsuccess = e => {
-    const cursor = e.target.result;
-    if (!cursor) return;
+  tx.objectStore("pdfs").openCursor().onsuccess = e => {
+    const c = e.target.result;
+    if (!c) return;
 
     const div = document.createElement("div");
-    div.className = "item";
+    div.className = "pdf-item";
     div.innerHTML = `
-      <span>${cursor.value.date}</span>
-      <button onclick="downloadPDF(${cursor.key})">Download</button>
+      <span>${c.value.date}</span>
+      <button onclick="downloadPDF(${c.key})">Download</button>
     `;
     list.appendChild(div);
-    cursor.continue();
+    c.continue();
   };
 }
 
 function downloadPDF(id) {
   const tx = db.transaction("pdfs", "readonly");
-  const store = tx.objectStore("pdfs");
-  store.get(id).onsuccess = e => {
+  tx.objectStore("pdfs").get(id).onsuccess = e => {
     const url = URL.createObjectURL(e.target.result.blob);
     const a = document.createElement("a");
     a.href = url;
@@ -143,10 +216,10 @@ function downloadPDF(id) {
 }
 
 function toBase64(file) {
-  return new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.readAsDataURL(file);
   });
 }
 </script>
